@@ -1,3 +1,6 @@
+import { Telemetry } from "./telemetry";
+import type { LogEntry } from "./shared";
+
 (() => {
   const PAGE_SOURCE = "ytm-pip-keep";
   const BRIDGE_SOURCE = "ytm-pip-bridge";
@@ -30,19 +33,12 @@
   const disableState = new WeakMap<HTMLVideoElement, boolean>();
   const pipHintTimes = new WeakMap<HTMLVideoElement, number>();
 
-  function log(event: string, detail = "") {
-    window.postMessage(
-      {
-        source: PAGE_SOURCE,
-        type: "log",
-        entry: {
-          ts: Date.now(),
-          event,
-          detail: detail || "",
-        },
-      },
-      "*",
-    );
+  const telemetry = new Telemetry((entry) => {
+    window.postMessage({ source: PAGE_SOURCE, type: "log", entry }, "*");
+  });
+
+  function log(event: string, detail = "", video?: HTMLVideoElement | null, context: Partial<LogEntry> = {}) {
+    telemetry.record(event, detail, video, context);
   }
 
   function detailOf(video: HTMLVideoElement | null, extra = "") {
@@ -171,7 +167,7 @@
     if (widths.has(video) && (previous === 0) !== (now === 0)) {
       const label =
         now === 0 ? (isWidthZeroGlitch(video) ? "zero-transitorio" : "zero") : "quadro";
-      log("video-quadro", detailOf(video, label));
+      log("video-quadro", detailOf(video, label), video);
     }
     widths.set(video, now);
   }
@@ -182,7 +178,7 @@
     if (disableState.get(video) === value) return;
     disableState.set(video, value);
     if (shouldLogVideo(video) && (video === guarded || isInPictureInPicture(video))) {
-      log("pip-disable-flag", detailOf(video, `value=${value}`));
+      log("pip-disable-flag", detailOf(video, `value=${value}`), video);
     }
     tryClaimPipFromVideo(video);
   }
@@ -192,10 +188,10 @@
     const state = readPlayback(guarded);
     if (state === lastPlayback) return;
     lastPlayback = state;
-    if (state === "playing") log("ativo", detailOf(guarded));
-    else if (state === "paused") log("pausado", detailOf(guarded));
+    if (state === "playing") log("ativo", detailOf(guarded), guarded);
+    else if (state === "paused") log("pausado", detailOf(guarded), guarded);
     else if (state === "dead") {
-      log("destruido", detailOf(guarded));
+      log("destruido", detailOf(guarded), guarded);
       deadSince = Date.now();
     }
   }
@@ -203,7 +199,7 @@
   function noteIgnored(video: HTMLVideoElement) {
     if (ignoredLatch) return;
     ignoredLatch = true;
-    log("ignorado", detailOf(video, "janela-viva"));
+    log("ignorado", detailOf(video, "janela-viva"), video);
   }
 
   function clearIgnored() {
@@ -527,12 +523,12 @@
 
   function releasePipSession(source: string) {
     if (!(guarded instanceof HTMLVideoElement) || !restorePip || suppressLeave) return;
-    log("pip-leave", detailOf(guarded, source));
+    log("pip-leave", detailOf(guarded, source), guarded);
     restorePip = false;
     waitingForGesture = false;
     deadSince = 0;
     clearIgnored();
-    log("desativado", detailOf(guarded, source));
+    log("desativado", detailOf(guarded, source), guarded);
     lastPlayback = "none";
     guarded = null;
     releaseAnchor();
@@ -561,7 +557,7 @@
     if (pipWindow && !pipWindows.has(pipWindow)) {
       pipWindows.add(pipWindow);
       pipWindow.addEventListener("resize", () => {
-        log("pip-resize", detailOf(video, `${pipWindow.width}x${pipWindow.height}`));
+        log("pip-resize", detailOf(video, `${pipWindow.width}x${pipWindow.height}`), video);
       });
     }
   }
@@ -576,14 +572,14 @@
     clearIgnored();
     lastPlayback = "none";
     if (fresh) {
-      log("pip-enter", detailOf(video, source));
-      log("detectado", detailOf(video, source));
+      log("pip-enter", detailOf(video, source), video, { origin: source });
+      log("detectado", detailOf(video, source), video, { origin: source });
     }
     publishPlayback();
     if (pipWindow && !pipWindows.has(pipWindow)) {
       pipWindows.add(pipWindow);
       pipWindow.addEventListener("resize", () => {
-        log("pip-resize", detailOf(video, `${pipWindow.width}x${pipWindow.height}`));
+        log("pip-resize", detailOf(video, `${pipWindow.width}x${pipWindow.height}`), video);
       });
     }
   }
@@ -667,6 +663,7 @@
     log(
       "pip-firefox",
       `abre ${source} foco=${document.hasFocus()} vis=${document.visibilityState} ativ=${firefoxActivationOn()} gesto=${Date.now() - firefoxPageGestureAt}ms`,
+      video, { origin: `firefox-${source}`, ...(source === "clone" ? { evidence: "observed", outcome: "confirmed" } : {}) },
     );
     announcePipReopen(video, `firefox-${source}`);
   }
@@ -677,10 +674,10 @@
     firefoxSuppressArmUntil = Date.now() + FIREFOX_REARM_COOLDOWN_MS;
     clearFirefoxOpenTimers();
     const video = guarded instanceof HTMLVideoElement ? guarded : pickPrimaryPlayerVideo();
-    log("pip-firefox", `fecha ${source}`);
+    log("pip-firefox", `fecha ${source}`, video, { origin: `firefox-${source}` });
     markPipClosing();
     if (lastPipUiOpen || restorePip) {
-      if (video instanceof HTMLVideoElement) log("pip-fecha", detailOf(video, source));
+      if (video instanceof HTMLVideoElement) log("pip-fecha", detailOf(video, source), video);
       releasePipSession(source);
     }
     notePipDismissed();
@@ -726,9 +723,9 @@
 
   function noteFirefoxPause(video: HTMLVideoElement) {
     if (!firefoxPip || video !== guarded) return;
-    // Pause, blur e foco tamb?m ocorrem com a janela aberta e na troca de faixa.
-    // Sem um evento de sa?da, mantenha a sess?o protegida.
-    log("pip-firefox-probe", `pausa-preservada ${detailOf(video)} foco=${document.hasFocus()}`);
+    // Pause, blur e foco também ocorrem com a janela aberta e na troca de faixa.
+    // Sem um evento de saída, mantenha a sessão protegida.
+    log("pip-firefox-probe", `pausa-preservada ${detailOf(video)} foco=${document.hasFocus()}`, video);
   }
 
   function onFirefoxFocusChange() {
@@ -786,13 +783,17 @@
       (event) => {
         const video =
           event.target instanceof HTMLVideoElement ? event.target : pickPrimaryPlayerVideo();
-        if (video instanceof HTMLVideoElement) armFirefoxPip(video, "moz");
+        if (video instanceof HTMLVideoElement) {
+          if (telemetry.firstNativeEvent(event)) log("pip-native-toggle", "MozTogglePictureInPicture: solicitação recebida", video, { evidence: "attempt", outcome: "unconfirmed", origin: event.isTrusted ? "browser-event" : "synthetic-event" });
+          armFirefoxPip(video, "moz");
+        }
       },
       true,
     );
     document.addEventListener(
       "MozStopPictureInPicture",
-      () => {
+      (event) => {
+        if (telemetry.firstNativeEvent(event)) log("pip-native-leave", "MozStopPictureInPicture", guarded, { outcome: event.isTrusted ? "confirmed" : "unconfirmed", origin: event.isTrusted ? "browser-event" : "synthetic-event" });
         disarmFirefoxPip("moz");
       },
       true,
@@ -822,7 +823,8 @@
     lastPipUiOpen = true;
     lastMediaSession = mediaSessionState();
     const tag = wasDismissed ? "reabre" : "abre";
-    log("pip-abre", detailOf(video, `${tag} ${source} sessao=${lastMediaSession}`));
+    log("pip-abre", detailOf(video, `${tag} ${source} sessao=${lastMediaSession}`), video, { origin: source,
+      ...(source === "getter" || source.endsWith("-api") ? { evidence: "observed", outcome: "confirmed" } : {}) });
     note(video);
     claimPipSession(video, source, pipWindowOf(video));
   }
@@ -862,7 +864,7 @@
       markPipClosing();
       lastPipUiOpen = false;
       notePipDismissed();
-      log("pip-fecha", detailOf(subject, `sessao=${session}`));
+      log("pip-fecha", detailOf(subject, `sessao=${session}`), subject);
       releasePipSession("sessao");
       lastMediaSession = session;
       return;
@@ -879,26 +881,29 @@
   function onEnter(event: PictureInPictureEvent) {
     const video = event.target;
     if (!(video instanceof HTMLVideoElement)) return;
+    if (telemetry.firstNativeEvent(event)) log("pip-native-enter", "enterpictureinpicture", video, { outcome: event.isTrusted ? "confirmed" : "unconfirmed", origin: event.isTrusted ? "browser-event" : "synthetic-event" });
     note(video);
     hadPipWindow.set(video, true);
     announcePipReopen(video, "enter");
   }
 
   function onLeave(event: PictureInPictureEvent) {
+    const recordEvent = telemetry.firstNativeEvent(event);
     const video = event.target instanceof HTMLVideoElement ? event.target : guarded;
+    if (recordEvent) log("pip-native-leave", "leavepictureinpicture", video, { outcome: event.isTrusted ? "confirmed" : "unconfirmed", origin: event.isTrusted ? "browser-event" : "synthetic-event" });
     if (video instanceof HTMLVideoElement) hadPipWindow.set(video, false);
     firefoxPip = false;
     markPipClosing();
     notePipDismissed();
     lastMediaSession = mediaSessionState();
-    log("pip-fecha", detailOf(video, "leave"));
-    log("pip-leave", detailOf(video));
+    if (recordEvent) log("pip-fecha", detailOf(video, "leave"), video, { origin: event.isTrusted ? "browser-event" : "synthetic-event", evidence: "observed", outcome: event.isTrusted ? "confirmed" : "unconfirmed" });
+    if (recordEvent) log("pip-leave", detailOf(video), video);
     if (suppressLeave) return;
     restorePip = false;
     waitingForGesture = false;
     deadSince = 0;
     clearIgnored();
-    log("desativado", detailOf(video));
+    if (recordEvent) log("desativado", detailOf(video), video);
     lastPlayback = "none";
     if (guarded === video) guarded = null;
     releaseAnchor();
@@ -930,7 +935,7 @@
       video.addEventListener(name, () => {
         if (!shouldWatch(video)) return;
         const extra = name === "error" && video.error ? `code=${video.error.code}` : "";
-        if (shouldLogVideo(video)) log(eventName, detailOf(video, extra));
+        if (shouldLogVideo(video)) log(eventName, detailOf(video, extra), video);
         noteFrame(video);
         if (video === guarded) publishPlayback();
         if (name === "playing" || name === "loadeddata") considerHandoff();
@@ -952,7 +957,7 @@
     if (fresh) {
       known.add(video);
       bind(video);
-      if (shouldLogVideo(video)) log("video-criado", detailOf(video));
+      if (shouldLogVideo(video)) log("video-criado", detailOf(video), video);
       noteFrame(video);
       noteDisable(video);
     }
@@ -976,7 +981,7 @@
         shouldWatch(video) &&
         shouldLogVideo(video)
       ) {
-        log("video-inserido", detailOf(video));
+        log("video-inserido", detailOf(video), video);
       }
       if (fresh && video.isConnected) probeVideoBurst(video, "scan");
     }
@@ -1044,7 +1049,7 @@
       note(video);
       if (isPlayerVideo(video)) playerVideos.add(video);
       if (!(anchor && anchor.contains(video)) && shouldWatch(video) && shouldLogVideo(video) && !bypass) {
-        log("video-inserido", detailOf(video));
+        log("video-inserido", detailOf(video), video);
       }
       if (fresh && video.isConnected) probeVideoBurst(video, "mutation");
     }
@@ -1067,7 +1072,7 @@
     if (bypass) return;
     if (node instanceof HTMLVideoElement) {
       if (shouldWatch(node) && !node.isConnected) {
-        if (shouldLogVideo(node)) log("video-desconectou", detailOf(node));
+        if (shouldLogVideo(node)) log("video-desconectou", detailOf(node), node);
         adoptDetached(node);
       }
       return;
@@ -1075,7 +1080,7 @@
     if (!(node instanceof Element) || !node.querySelectorAll) return;
     for (const video of Array.from(node.querySelectorAll("video"))) {
       if (shouldWatch(video) && !video.isConnected) {
-        if (shouldLogVideo(video)) log("video-desconectou", detailOf(video));
+        if (shouldLogVideo(video)) log("video-desconectou", detailOf(video), video);
         adoptDetached(video);
       }
     }
@@ -1092,7 +1097,7 @@
     restorePip = true;
     deadSince = 0;
     lastPlayback = "none";
-    log("detectado", detailOf(video, "solto"));
+    log("detectado", detailOf(video, "solto"), video);
     noteIgnored(video);
     publishPlayback();
   }
@@ -1158,7 +1163,7 @@
   }
 
   function logRemoval(api: string, parked: boolean) {
-    log("video-removido", detailOf(guarded, parked ? `${api} estacionado` : api));
+    log("video-removido", detailOf(guarded, parked ? `${api} estacionado` : api), guarded);
   }
 
   function logForeignRemoval(node: Node, api: string) {
@@ -1168,7 +1173,7 @@
     else if (node instanceof Element && node.querySelectorAll) videos.push(...Array.from(node.querySelectorAll("video")));
     for (const video of videos) {
       if (!shouldWatch(video) || video === guarded || !shouldLogVideo(video)) continue;
-      log("video-removido", detailOf(video, api));
+      log("video-removido", detailOf(video, api), video);
     }
   }
 
@@ -1210,6 +1215,8 @@
     handoffBusy = true;
     suppressLeave = true;
     const previous = guarded;
+    const operationId = telemetry.startOperation(candidate);
+    log("pip-handoff-start", previous ? `anterior=${telemetry.videoId(previous)}` : "sem-video-anterior", candidate);
     try {
       if (candidate.disablePictureInPicture) candidate.disablePictureInPicture = false;
       if (previous && previous !== candidate) {
@@ -1224,7 +1231,7 @@
       deadSince = 0;
       clearIgnored();
       lastPlayback = "none";
-      log("handoff", detailOf(candidate));
+      log("handoff", detailOf(candidate), candidate);
       publishPlayback();
       if (previous && previous !== candidate && anchor && anchor.contains(previous)) {
         bypass = true;
@@ -1236,13 +1243,14 @@
       }
     } catch (error) {
       const name = error instanceof DOMException ? error.name : "Error";
-      log("erro", detailOf(candidate, name));
+      log("erro", detailOf(candidate, name), candidate);
       if (name === "NotAllowedError") waitingForGesture = true;
       else {
         handoffAfter = Date.now() + 1000;
         if (name === "InvalidStateError") waitForFrames(candidate);
       }
     } finally {
+      telemetry.endOperation(candidate, operationId);
       suppressLeave = false;
       handoffBusy = false;
     }
@@ -1257,7 +1265,7 @@
       video.removeEventListener("loadeddata", onReady);
       video.removeEventListener("resize", onReady);
       video.removeEventListener("playing", onReady);
-      if (timedOut) log("erro", detailOf(video, "espera-encerrada"));
+      if (timedOut) log("erro", detailOf(video, "espera-encerrada"), video);
     };
     const onReady = () => {
       if (!enabled || !restorePip) {
@@ -1469,28 +1477,32 @@
     HTMLVideoElement.prototype.requestPictureInPicture = function requestPictureInPicture() {
       const video = this instanceof HTMLVideoElement ? this : null;
       const tracked = Boolean(video && (isPlayerVideo(video) || known.has(video)));
+      const operationId = video ? (handoffBusy ? telemetry.operation(video) : telemetry.startOperation(video)) : undefined;
       if (video) note(video);
-      if (tracked && video && shouldLogVideo(video)) log("pip-request", detailOf(video));
+      if (tracked && video && shouldLogVideo(video)) log("pip-request", detailOf(video), video);
       try {
         const pending = originalRequest.call(this);
         if (video) {
           probeVideoBurst(video, "request");
           Promise.resolve(pending).then(
             () => {
-              if (tracked && shouldLogVideo(video)) log("pip-request-ok", detailOf(video));
+              if (tracked && shouldLogVideo(video)) log("pip-request-ok", detailOf(video), video, { operationId });
               probeVideoOnce(video, "request-ok");
+              if (!handoffBusy && operationId) telemetry.endOperation(video, operationId);
             },
             (error: unknown) => {
+              if (!handoffBusy && operationId) telemetry.endOperation(video, operationId);
               if (tracked && shouldLogVideo(video)) {
-                log("pip-request-erro", detailOf(video, error instanceof DOMException ? error.name : ""));
+                log("pip-request-erro", detailOf(video, error instanceof DOMException ? error.name : ""), video, { operationId });
               }
             },
           );
         }
         return pending;
       } catch (error: unknown) {
+        if (video && !handoffBusy && operationId) telemetry.endOperation(video, operationId);
         if (tracked && video && shouldLogVideo(video)) {
-          log("pip-request-erro", detailOf(video, error instanceof DOMException ? error.name : ""));
+          log("pip-request-erro", detailOf(video, error instanceof DOMException ? error.name : ""), video, { operationId });
         }
         throw error;
       }
@@ -1510,7 +1522,7 @@
     const originalLoad = HTMLMediaElement.prototype.load;
     HTMLMediaElement.prototype.load = function load() {
       if (this instanceof HTMLVideoElement && shouldWatch(this) && shouldLogVideo(this)) {
-        log("video-load", detailOf(this));
+        log("video-load", detailOf(this), this);
       }
       return originalLoad.call(this);
     };
@@ -1572,7 +1584,7 @@
         const previous = get.call(this);
         set.call(this, value);
         if (previous !== value && this instanceof HTMLVideoElement && shouldWatch(this) && shouldLogVideo(this)) {
-          log("video-src", detailOf(this, label));
+          log("video-src", detailOf(this, label), this);
         }
       },
     });
@@ -1583,7 +1595,7 @@
     const present = el != null;
     if (present !== lastGetterPresent) {
       lastGetterPresent = present;
-      log("pip-getter", present ? "presente" : "null");
+      log("pip-getter", present ? "presente" : "null", el instanceof HTMLVideoElement ? el : null);
       if (el instanceof HTMLVideoElement) {
         const had = hadPipWindow.get(el) ?? false;
         hadPipWindow.set(el, present);
@@ -1632,6 +1644,7 @@
     return true;
   }
 
+  log("telemetry-session", "Coleta estruturada iniciada");
   hookInsertionApis();
   hookRemovalApis();
   hookMediaApis();

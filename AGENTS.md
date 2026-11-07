@@ -5,6 +5,7 @@
 - Responda em português. Execute o trabalho solicitado e reporte resultado, validação e limitações de forma breve.
 - Comece pela mudança pedida, `git status --short` e buscas específicas com `rg`. Leia apenas os trechos necessários; evite despejar arquivos grandes, lockfiles, `node_modules/` ou `dist/` no contexto.
 - Este arquivo é o mapa inicial. Para problemas de PiP no Firefox, leia também `docs/firefox-pip.md`. Para instalação e recarga manual, consulte `docs/instalar-firefox.md`.
+- Para coleta e interface dos logs, consulte `docs/logs.md`. A instrumentação não controla o PiP; não trate heurísticas ou promessas resolvidas como confirmação de janela.
 - Prefira código, logs fornecidos e documentação local para investigar o comportamento existente. Consulte fontes oficiais externas quando precisar confirmar APIs, compatibilidade, detalhes internos do Firefox ou informações sujeitas a mudança. Não repita pesquisas já documentadas sem uma dúvida concreta; registre a fonte, versão e conclusão quando pesquisar algo novo.
 - Separe observação, hipótese e confirmação. Não transforme uma heurística ou resultado de teste simulado em garantia sobre o navegador real.
 - Atualize a documentação relevante quando uma descoberta invalidar o fluxo descrito. Guarde fatos duráveis, comandos e pendências; não transcrições de conversa nem logs extensos.
@@ -20,6 +21,8 @@ Extensão Manifest V3 para manter o PiP do YouTube Music. TypeScript estrito, Re
 | `src/pip-keep.ts` | Script no mundo MAIN: detecção PiP, proteção do vídeo, hooks DOM/mídia, troca de vídeo e heurísticas Firefox. Arquivo grande: localize funções com `rg -n` antes de ler trechos. |
 | `src/bridge.ts` | Ponte entre mensagens da página e storage da extensão; estado ativado e gravação dos logs. |
 | `src/shared.ts` | Tipos, validação, classificação e retenção dos logs; chaves do storage. |
+| `src/telemetry.ts`, `src/timeline.ts` | Instrumentação e correlação; filtros, descrições, resumos e exportação. |
+| `src/log-store.ts`, `src/log-client.ts` | Fila única do background e cliente de mensagens. Todas as escritas passam por essa fila. |
 | `src/background.ts` | Ícone abre a configuração empacotada. |
 | `src/options/` | Interface React de configuração e visualização dos logs. |
 | `src/options-bridge.ts` | Ponte para a página de desenvolvimento em localhost. |
@@ -33,6 +36,7 @@ Extensão Manifest V3 para manter o PiP do YouTube Music. TypeScript estrito, Re
 - Documentação apenas: confira conteúdo, caminhos e comandos; não rode build.
 - Scripts da extensão: `node scripts/bundle.mjs` e `npx --no-install tsc --noEmit`.
 - Mudanças no PiP Firefox: rode também `node scripts/test-firefox-pause.mjs`. É uma regressão simulada, não um teste de integração do navegador.
+- Mudanças nos logs: `node --test scripts/test-logs.mjs`. Para a interface empacotada, após o build use `python scripts/test-firefox-ui.py` (Firefox isolado, sem dependências Python adicionais).
 - Interface ou configuração Vite: `npm run build` e `npx --no-install tsc --noEmit`.
 - Para entregar um pacote completo ou quando `dist/` estiver ausente: `npm run build`.
 - Use as dependências locais instaladas. Não reinstale nem troque o gerenciador/lockfile sem necessidade.
