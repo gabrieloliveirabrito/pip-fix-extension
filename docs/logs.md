@@ -2,6 +2,8 @@
 
 A configuração empacotada mostra uma linha do tempo com eventos recentes primeiro, filtros por sessão, vídeo, categoria, falhas e ações, e busca nos dados técnicos. Os detalhes recolhidos incluem o registro bruto. Exportação JSON/texto usa ordem de recebimento, do mais antigo para o mais recente, e inclui todo o escopo escolhido, independentemente da paginação visual.
 
+O seletor **Tabela compacta / Linha do tempo** alterna a apresentação dos mesmos registros. A tabela é o padrão, com uma linha por evento, cabeçalho fixo e detalhes expansíveis; em janelas estreitas, a rolagem horizontal fica dentro da tabela. A preferência é lembrada localmente. Filtros, pausa, contagens e exportação são compartilhados pelos dois modos.
+
 **Pausar visualização** congela a tela e permite continuar examinando os dados. A coleta permanece ativa; o contador de novos registros considera recebimento, não somente o tamanho da lista, pois a retenção pode descartar entradas. Exportações feitas durante a pausa usam o histórico congelado. **Retomar** mostra o histórico disponível naquele momento.
 
 São renderizados 200 registros por vez, ampliáveis pelo botão de carregar mais. Enquanto o usuário lê uma posição anterior, a janela de linhas acompanha o registro de referência mesmo quando chegam novos eventos. **Voltar aos mais recentes** retorna ao início atualizado. Registros removidos pela retenção deixam de estar disponíveis.

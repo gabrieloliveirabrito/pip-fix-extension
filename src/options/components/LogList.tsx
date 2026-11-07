@@ -2,11 +2,11 @@ import { PureComponent, createRef } from "react";
 import { describeLog, logOutcome, type LogEntry } from "../../shared";
 import { evidenceLabels, formatLogTime, logKey, outcomeLabels } from "../../timeline";
 
-type Props = { rows: LogEntry[]; limit?: number; emptyLabel?: string };
+type Props = { rows: LogEntry[]; limit?: number; emptyLabel?: string; mode?: "table" | "timeline" };
 type Anchor = { key: string; offset: number; scrollTop: number } | null;
 
 export class LogList extends PureComponent<Props> {
-  private viewport = createRef<HTMLOListElement>();
+  private viewport = createRef<HTMLDivElement>();
   private readingAnchor?: { key: string; index: number };
 
   private rememberPosition = () => {
@@ -42,7 +42,7 @@ export class LogList extends PureComponent<Props> {
   }
 
   render() {
-    const { rows, limit = 200, emptyLabel = "Nenhum registro corresponde aos filtros." } = this.props;
+    const { rows, limit = 200, emptyLabel = "Nenhum registro corresponde aos filtros.", mode = "timeline" } = this.props;
     const occurrences = new Map<string, number>();
     const keyed = rows.map((entry) => {
       const base = logKey(entry);
@@ -62,8 +62,33 @@ export class LogList extends PureComponent<Props> {
           this.forceUpdate(() => this.viewport.current?.scrollTo({ top: 0 }));
         }}>Voltar aos mais recentes</button>
       </div>
-      <ol ref={this.viewport} onScroll={this.rememberPosition} aria-label="Linha do tempo dos registros" tabIndex={0}
+      <div ref={this.viewport} data-log-viewport onScroll={this.rememberPosition} aria-label="Registros de eventos" tabIndex={0}
         style={{ overflowAnchor: "none" }} className="max-h-[65vh] overflow-auto rounded-xl border border-zinc-800 bg-zinc-950 outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+      {mode === "table" ? <table className="w-full min-w-[960px] border-collapse text-left text-xs">
+        <caption className="sr-only">Tabela compacta dos registros, mais recentes primeiro</caption>
+        <thead className="sticky top-0 z-10 bg-zinc-900 text-zinc-300">
+          <tr>{["Horário", "Evento", "Evidência", "Resultado", "Vídeo / sessão", "Detalhes"].map((label) => <th key={label} scope="col" className="whitespace-nowrap border-b border-zinc-700 px-3 py-2 font-medium">{label}</th>)}</tr>
+        </thead>
+        <tbody>
+          {!rows.length && <tr><td colSpan={6} className="p-6 text-zinc-400">{emptyLabel}</td></tr>}
+          {visible.map(({ entry, key }) => {
+            const outcome = logOutcome(entry);
+            const tone = outcome === "failed" ? "text-rose-300" : entry.evidence === "inferred" ? "text-amber-200" : "text-sky-200";
+            return <tr key={key} data-row-key={key} className="border-b border-zinc-800/70 align-top hover:bg-zinc-900/60">
+              <td className="whitespace-nowrap px-3 py-1.5 font-mono text-zinc-400"><time dateTime={new Date(entry.ts).toISOString()}>{formatLogTime(entry.ts)}</time></td>
+              <td className="max-w-56 px-3 py-1.5 font-mono text-zinc-100"><span className="block truncate" title={describeLog(entry)}>{entry.event}</span></td>
+              <td className={`whitespace-nowrap px-3 py-1.5 ${tone}`}>{entry.evidence ? evidenceLabels[entry.evidence] : "Registro legado"}</td>
+              <td className={`whitespace-nowrap px-3 py-1.5 ${tone}`}>{outcome ? outcomeLabels[outcome] : "—"}</td>
+              <td className="whitespace-nowrap px-3 py-1.5 text-zinc-400" title={entry.sessionId}>{entry.videoId ?? "—"} / {entry.sessionId?.slice(0, 8) ?? "sem sessão"}</td>
+              <td className="px-3 py-1.5 text-zinc-400"><details>
+                <summary className="cursor-pointer whitespace-nowrap rounded text-zinc-300 focus-visible:outline-2 focus-visible:outline-sky-400">Ver registro</summary>
+                <p className="my-2 max-w-80 text-zinc-200">{describeLog(entry)}</p>
+                <pre className="max-h-64 max-w-80 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-900 p-2">{JSON.stringify(entry, null, 2)}</pre>
+              </details></td>
+            </tr>;
+          })}
+        </tbody>
+      </table> : <ol aria-label="Linha do tempo dos registros">
         {!rows.length && <li className="p-8 text-sm text-zinc-400">{emptyLabel}</li>}
         {visible.map(({ entry, key }) => {
           const outcome = logOutcome(entry);
@@ -91,6 +116,8 @@ export class LogList extends PureComponent<Props> {
           </li>;
         })}
       </ol>
+      }
+      </div>
     </div>;
   }
 }

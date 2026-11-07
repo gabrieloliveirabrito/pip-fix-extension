@@ -141,6 +141,13 @@ def run():
             **({"outcome": "failed"} if i == 159 else {})} for i in range(260)]
         client.append(rows)
         client.wait("document.querySelectorAll('[data-row-key]').length===200")
+        assert client.js("return !!document.querySelector('table')"), "Compact table is the default"
+        assert client.js("return document.querySelector('[data-row-key]').getBoundingClientRect().height") < 40
+        client.js("document.querySelector('details').open=true")
+        assert "fixture-259" in client.js("return document.querySelector('details').innerText")
+        client.js("document.querySelector('details').open=false")
+        image = client.command("WebDriver:TakeScreenshot", {"full": True})
+        (root / "dist/log-table-desktop.png").write_bytes(base64.b64decode(image))
         client.click("Pausar visualização")
         later = {**rows[-1], "id": "fixture-later", "sequence": 260, "ts": now + 600, "detail": "new-event-while-paused"}
         client.append([later])
@@ -149,13 +156,16 @@ def run():
         client.click("Retomar visualização")
         client.wait("document.querySelector('[data-row-key]')?.dataset.rowKey==='fixture-later:0'")
 
-        anchor = client.js("const v=document.querySelector('ol');v.scrollTop=v.scrollHeight-v.clientHeight-30;v.dispatchEvent(new Event('scroll'));const top=v.getBoundingClientRect().top;const r=Array.from(v.children).find(r=>r.getBoundingClientRect().bottom>top);return {key:r.dataset.rowKey,offset:r.getBoundingClientRect().top-top}")
+        anchor = client.js("const v=document.querySelector('[data-log-viewport]');v.scrollTop=v.scrollHeight-v.clientHeight-30;v.dispatchEvent(new Event('scroll'));const top=v.getBoundingClientRect().top;const r=Array.from(v.querySelectorAll('[data-row-key]')).find(r=>r.getBoundingClientRect().bottom>top);return {key:r.dataset.rowKey,offset:r.getBoundingClientRect().top-top}")
         client.append([{**later, "id": "fixture-after-scroll", "sequence": 261}])
         client.wait("document.body.innerText.includes('262 registros encontrados')")
-        offset = client.js("const r=Array.from(document.querySelectorAll('[data-row-key]')).find(r=>r.dataset.rowKey===arguments[0]);return r.getBoundingClientRect().top-document.querySelector('ol').getBoundingClientRect().top", [anchor["key"]])
+        offset = client.js("const r=Array.from(document.querySelectorAll('[data-row-key]')).find(r=>r.dataset.rowKey===arguments[0]);return r.getBoundingClientRect().top-document.querySelector('[data-log-viewport]').getBoundingClientRect().top", [anchor["key"]])
         assert abs(offset - anchor["offset"]) < 2, (anchor, offset)
         client.click("Voltar aos mais recentes")
-        client.wait("document.querySelector('ol').scrollTop===0")
+        client.wait("document.querySelector('[data-log-viewport]').scrollTop===0")
+
+        client.click("Linha do tempo")
+        client.wait("!!document.querySelector('ol')&&!document.querySelector('table')")
 
         def select(index, value):
             client.js("const select=document.querySelectorAll('select')[arguments[0]];select.value=arguments[1];select.dispatchEvent(new Event('change',{bubbles:true}))", [index, value])
@@ -175,7 +185,7 @@ def run():
 
         client.js("const input=document.querySelector('input[type=search]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'NotAllowedError');input.dispatchEvent(new Event('input',{bubbles:true}));")
         client.wait("document.querySelectorAll('[data-row-key]').length===1")
-        assert "Solicitação de abertura falhou" in client.js("return document.querySelector('ol').innerText")
+        assert "Solicitação de abertura falhou" in client.js("return document.querySelector('[data-log-viewport]').innerText")
         client.js("document.querySelector('details').open=true")
         assert "NotAllowedError" in client.js("return document.querySelector('details').innerText")
 
@@ -217,7 +227,12 @@ def run():
         client.wait("document.querySelectorAll('[data-row-key]').length===1")
         client.js("document.querySelector('[role=switch]').click()")
         client.wait("document.querySelector('[role=switch]').getAttribute('aria-checked')==='false'")
-        print("PASS: packaged storage/runtime, live updates, pause/resume, scroll anchoring, search, details, JSON/text exports, responsive layout, inline errors, clear and toggle.", flush=True)
+        client.command("WebDriver:Navigate", {"url": f"moz-extension://{uuid}/options/index.html"})
+        client.wait("!!document.querySelector('ol')&&!document.querySelector('table')")
+        client.click("Tabela compacta")
+        client.command("WebDriver:Navigate", {"url": f"moz-extension://{uuid}/options/index.html"})
+        client.wait("!!document.querySelector('table')")
+        print("PASS: compact table density, shared pause/scroll, layout persistence, packaged storage/runtime, live updates, pause/resume, scroll anchoring, search, details, JSON/text exports, responsive layout, inline errors, clear and toggle.", flush=True)
     except Exception:
         logfile.flush()
         print((temporary / "firefox.log").read_text(encoding="utf-8", errors="replace")[-2500:], file=sys.stderr)

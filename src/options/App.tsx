@@ -18,6 +18,10 @@ export function App({ mode }: Props) {
   const [frozen, setFrozen] = useState<StorageSnapshot | null>(null);
   const [filters, setFilters] = useState<TimelineFilters>(defaultFilters);
   const [limit, setLimit] = useState(200);
+  const [layout, setLayout] = useState<"table" | "timeline">(() => {
+    try { return localStorage.getItem("pip-log-layout") === "timeline" ? "timeline" : "table"; }
+    catch { return "table"; }
+  });
   const [ready, setReady] = useState(false);
   const [bridge, setBridge] = useState("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +177,15 @@ export function App({ mode }: Props) {
           <p role="status" className="mt-1 text-xs text-zinc-400">{frozen ? `Visualização pausada · ${newCount} novos registros recebidos. A coleta continua.` : "Atualização ao vivo · mais recentes primeiro"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <div role="group" aria-label="Formato dos registros" className="flex gap-1">
+            {([['table', 'Tabela compacta'], ['timeline', 'Linha do tempo']] as const).map(([value, label]) =>
+              <button key={value} type="button" aria-pressed={layout === value}
+                className={`log-button ${layout === value ? "border-sky-500 text-sky-200" : ""}`}
+                onClick={() => {
+                  setLayout(value);
+                  try { localStorage.setItem("pip-log-layout", value); } catch { /* Preference remains available for this page. */ }
+                }}>{label}</button>)}
+          </div>
           <button type="button" className="log-button" aria-pressed={!!frozen} onClick={() => setFrozen(frozen ? null : snapshot)}>{frozen ? "Retomar visualização" : "Pausar visualização"}</button>
           <button type="button" className="log-button" disabled={busy || !ready} onClick={() => void action(async () => {
             await write({ logs: [] }); setFrozen(null); setFilters(defaultFilters); setLimit(200);
@@ -181,7 +194,7 @@ export function App({ mode }: Props) {
       </div>
       <p className="text-xs text-zinc-500">Até {MAX_LOGS.toLocaleString("pt-BR")} registros ou 4 MiB. {snapshot.meta.discarded} descartados por retenção desde a última limpeza.
         {view.meta.firstAvailableAt !== undefined && ` Histórico disponível desde ${formatLogTime(view.meta.firstAvailableAt)}.`}</p>
-      <LogList key={`${filters.session}/${filters.video}/${filters.category}/${filters.kind}/${filters.query}`} rows={rows} limit={limit} />
+      <LogList key={`${layout}/${filters.session}/${filters.video}/${filters.category}/${filters.kind}/${filters.query}`} rows={rows} limit={limit} mode={layout} />
       {matched.length > limit && <button type="button" className="log-button self-center" onClick={() => setLimit((value) => value + 200)}>Carregar mais 200 ({Math.min(limit, matched.length)} de {matched.length})</button>}
       <div className="flex flex-wrap gap-2 border-t border-zinc-800 pt-4">
         <span className="w-full text-xs text-zinc-400">Exportação em ordem de recebimento, do mais antigo para o mais recente. {frozen ? "Usa o histórico congelado na pausa." : "Inclui todos os registros disponíveis no escopo escolhido."}</span>
