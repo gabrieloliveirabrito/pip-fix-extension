@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "PiP persistente no YouTube Music",
+  "version": "1.0.0",
+  "description": "Mantém o Picture-in-Picture no YouTube Music quando o player destrói o vídeo e registra os sinais da janela.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "Configuração do PiP do YouTube Music"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1:5173/*", "http://localhost:5173/*"],
+      "js": ["options-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["pip-keep.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "pip-keep@youtube-music",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PiP persistente no YouTube Music</title>
+    <style>
+      #boot-shell {
+        box-sizing: border-box;
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 2.5rem 1.5rem;
+        background: #09090b;
+        color: #e4e4e7;
+        font-family: system-ui, sans-serif;
+      }
+      #boot-shell p {
+        margin: 0;
+        font-size: 0.875rem;
+      }
+      #boot-shell .detail {
+        max-width: 28rem;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #71717a;
+      }
+      #boot-spinner {
+        width: 2rem;
+        height: 2rem;
+        border: 2px solid #3f3f46;
+        border-top-color: #34d399;
+        border-radius: 9999px;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-zinc-950">
+    <div id="root">
+      <div id="boot-shell" aria-live="polite">
+        <div id="boot-spinner" aria-hidden="true"></div>
+        <p>Carregando…</p>
+        <p class="detail" id="boot-detail"></p>
+      </div>
+    </div>
+    <script type="module">
+      const detail = document.getElementById("boot-detail");
+      if (import.meta.env.DEV && detail) {
+        detail.textContent = "Aguardando resposta do Vite.";
+        fetch(`${location.origin}/`, { cache: "no-store" }).catch(() => {});
+      }
+    </script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
