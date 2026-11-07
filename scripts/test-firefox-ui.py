@@ -132,6 +132,8 @@ def run():
         client.command("WebDriver:Navigate", {"url": f"moz-extension://{uuid}/options/index.html"})
         client.wait("document.querySelector('h1')?.textContent.includes('Linha do tempo')")
         client.wait("!document.body.innerText.includes('Carregando registros')")
+        labels = client.js("return Array.from(document.querySelectorAll('select')[2].options).map(option=>option.textContent)")
+        assert labels == ["Todas as categorias", "PiP (0)", "Remoções (0)", "Mídia (0)", "Extensão (0)", "Outros (0)"], labels
 
         now = int(time.time() * 1000)
         rows = [{"id": f"fixture-{i}", "sessionId": "session-A" if i % 2 else "session-B", "sequence": i,

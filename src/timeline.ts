@@ -2,10 +2,10 @@ import { describeLog, isActionLog, isPipSignal, logCategory, logOutcome, type Lo
 
 export const evidenceLabels = { observed: "Observado", inferred: "Inferido", attempt: "Tentativa", result: "Resultado" };
 export const outcomeLabels = {
-  confirmed: "Sinal confirmado", completed: "SolicitaÃ§Ã£o concluÃ­da", failed: "Falhou",
-  preserved: "Preservado", unconfirmed: "Sem confirmaÃ§Ã£o da janela",
+  confirmed: "Sinal confirmado", completed: "Solicitação concluída", failed: "Falhou",
+  preserved: "Preservado", unconfirmed: "Sem confirmação da janela",
 };
-export const categoryLabels = { pip: "PiP", remocao: "RemoÃ§Ãµes", midia: "MÃ­dia", extensao: "ExtensÃ£o", outro: "Outros" };
+export const categoryLabels = { pip: "PiP", remocao: "Remoções", midia: "Mídia", extensao: "Extensão", outro: "Outros" };
 export type TimelineFilters = { session: string; video: string; category: string; kind: string; query: string };
 export const defaultFilters: TimelineFilters = { session: "all", video: "all", category: "all", kind: "all", query: "" };
 
