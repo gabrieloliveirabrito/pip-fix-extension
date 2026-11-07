@@ -1,4 +1,5 @@
-import { ENABLED_KEY, isLogEntry, LOG_KEY, trimLogs } from "./shared";
+import { ENABLED_KEY, isLogEntry } from "./shared";
+import { logCommand } from "./log-client";
 
 const PAGE_SOURCE = "ytm-pip-keep";
 const BRIDGE_SOURCE = "ytm-pip-bridge";
@@ -11,7 +12,6 @@ type PageMessage = {
 
 let enabledCache = true;
 let storageReady = false;
-let writeChain: Promise<void> = Promise.resolve();
 
 function postEnabled() {
   window.postMessage({ source: BRIDGE_SOURCE, type: "enabled", value: enabledCache }, "*");
@@ -34,19 +34,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 function appendLog(entry: unknown) {
   if (!isLogEntry(entry)) return;
-  const nextEntry = entry;
-  writeChain = writeChain
-    .then(
-      () =>
-        new Promise<void>((resolve) => {
-          chrome.storage.local.get(LOG_KEY, (stored) => {
-            const logs = Array.isArray(stored[LOG_KEY]) ? stored[LOG_KEY].filter(isLogEntry) : [];
-            logs.push(nextEntry);
-            chrome.storage.local.set({ [LOG_KEY]: trimLogs(logs) }, () => resolve());
-          });
-        }),
-    )
-    .catch(() => undefined);
+  void logCommand({ type: "append", entries: [entry] }).catch((error) => {
+    console.warn("PiP: falha ao registrar evento", error instanceof Error ? error.message : "armazenamento indisponível");
+  });
 }
 
 window.addEventListener("message", (event: MessageEvent<PageMessage>) => {

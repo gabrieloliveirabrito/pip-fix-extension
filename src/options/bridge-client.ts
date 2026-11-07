@@ -1,9 +1,7 @@
+import { logCommand } from "../log-client";
 import {
-  ENABLED_KEY,
-  LOG_KEY,
   type OptionsValues,
   type StorageSnapshot,
-  snapshotFromStorage,
 } from "../shared";
 
 export const PAGE_SOURCE = "ytm-pip-options";
@@ -14,6 +12,7 @@ type BridgeMessage = {
   type?: string;
   requestId?: string;
   snapshot?: StorageSnapshot;
+  error?: string;
 };
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {
@@ -55,10 +54,12 @@ export function ask(message: { type: "get" } | { type: "set"; values: OptionsVal
     }, timeoutMs);
     function onReply(event: MessageEvent) {
       if (event.source !== window || !isBridgeMessage(event.data)) return;
-      if (event.data.requestId !== requestId || !event.data.snapshot) return;
+      if (event.data.requestId !== requestId) return;
       window.clearTimeout(timer);
       window.removeEventListener("message", onReply);
-      resolve(snapshotFromStorage(event.data.snapshot));
+      if (event.data.error) reject(new Error(event.data.error));
+      else if (event.data.snapshot) resolve(event.data.snapshot);
+      else reject(new Error("Resposta incompleta da ponte."));
     }
     window.addEventListener("message", onReply);
     window.postMessage({ source: PAGE_SOURCE, requestId, ...message }, location.origin);
@@ -77,7 +78,7 @@ export function connectDevBridge(
   const onLive = (event: MessageEvent) => {
     if (stopped || event.source !== window || !isBridgeMessage(event.data)) return;
     if (event.data.type !== "snapshot" || !event.data.snapshot) return;
-    onSnapshot(snapshotFromStorage(event.data.snapshot));
+    onSnapshot(event.data.snapshot);
     connected = true;
     onStatus("ready");
   };
@@ -123,32 +124,13 @@ export function connectDevBridge(
 }
 
 export function readPackagedSnapshot() {
-  return new Promise<StorageSnapshot>((resolve, reject) => {
-    if (!chrome.storage?.local) {
-      reject(new Error("chrome.storage.local indisponível nesta página."));
-      return;
-    }
-    chrome.storage.local.get([ENABLED_KEY, LOG_KEY], (data) => {
-      const lastError = chrome.runtime.lastError?.message;
-      if (lastError) {
-        reject(new Error(lastError));
-        return;
-      }
-      resolve(snapshotFromStorage(data));
-    });
-  });
+  return logCommand({ type: "snapshot" });
 }
 
-export function writePackaged(values: OptionsValues) {
-  return new Promise<void>((resolve, reject) => {
-    if (!chrome.storage?.local) {
-      reject(new Error("chrome.storage.local indisponível nesta página."));
-      return;
-    }
-    chrome.storage.local.set(values, () => {
-      const lastError = chrome.runtime.lastError?.message;
-      if (lastError) reject(new Error(lastError));
-      else resolve();
-    });
-  });
+export async function writePackaged(values: OptionsValues) {
+  if (values.logs !== undefined) {
+    if (values.logs.length) throw new Error("Somente a limpeza do histórico é permitida.");
+    await logCommand({ type: "clear" });
+  }
+  if (values.enabled !== undefined) await logCommand({ type: "enabled", value: values.enabled });
 }
