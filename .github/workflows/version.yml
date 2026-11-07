@@ -1,0 +1,63 @@
+name: Extension version
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [development, main]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Only run code already merged into the repository's base branch.
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test version rules
+        run: node --test scripts/test-version.mjs
+      - name: Update version on the merged branch
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          marker="Version-Merge: $MERGE_SHA"
+          # Recompute from the latest branch if another merge wins the push race.
+          for attempt in 1 2 3 4 5; do
+            git fetch origin "$TARGET_BRANCH" main
+            git reset --hard "origin/$TARGET_BRANCH"
+            if git log --format=%B --fixed-strings --grep="$marker" | grep -Fxq "$marker"; then
+              echo 'This merge was already processed.'
+              exit 0
+            fi
+            previous=$(git log -1 --format=%H --grep='^chore: sync extension version ')
+            floor=''
+            if [ -n "$previous" ]; then
+              floor=$(git show "$previous:VERSION")
+            fi
+            # Include the published version when syncing development.
+            if [ "$TARGET_BRANCH" = development ]; then
+              published=$(git show origin/main:VERSION 2>/dev/null || git show origin/main:package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')
+              floor=$(node -e 'const vs=process.argv.slice(1).filter(Boolean); vs.sort((a,b)=>{const x=a.split(".").map(Number),y=b.split(".").map(Number);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2]});console.log(vs.at(-1))' "$floor" "$published")
+            fi
+            version=$(node scripts/version.mjs "$TARGET_BRANCH" "$floor")
+            git add VERSION package.json manifest.json package-lock.json
+            # An empty commit records idempotency even when development is in sync.
+            git commit --allow-empty -m "chore: sync extension version $version" -m "$marker"
+            if git push origin "HEAD:$TARGET_BRANCH"; then
+              exit 0
+            fi
+          done
+          echo 'Could not publish the version after five attempts.' >&2
+          exit 1
