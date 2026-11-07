@@ -10,6 +10,8 @@
 - Atualize a documentação relevante quando uma descoberta invalidar o fluxo descrito. Guarde fatos duráveis, comandos e pendências; não transcrições de conversa nem logs extensos.
 - Evite novas dependências, refatorações amplas, instalações e alterações em lockfiles para correções locais. Preserve mudanças existentes do usuário.
 - Ao criar um PR, use uma branch dedicada e deixe essa branch ativa no workspace ao concluir. Não faça merge nem retorne à branch base automaticamente. Se publicação ou autenticação estiver bloqueada, preserve o trabalho e informe o que falta.
+- A branch padrão e base de novos trabalhos/PRs é `development`. `main` recebe as promoções para versão publicada.
+- Merges em `development` sincronizam `VERSION`; merges em `main` incrementam o patch e sincronizam `VERSION`, `package.json`, `manifest.json` e as versões do pacote raiz em `package-lock.json`. A automação está em `.github/workflows/version.yml`; não faça bump manual para duplicar o trabalho do CI. Veja `docs/versionamento.md`.
 
 ## Mapa do código
 
